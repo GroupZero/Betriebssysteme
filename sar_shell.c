@@ -20,12 +20,15 @@
 #define MAX_FOLDER_NAME 15
 #define MAX_BUFFER 180
 #define CHILD_RET 17
+#define MAX_BACKGROUND_PROCESSES 10
 
 unsigned int startPos = 0;
 pid_t waitID = 0;
 int pipeOn = 0;
 char *arg1;
 char *arg2;
+pid_t *arrayWithBackgroundProcesses;
+int backgroundPorcesses = 0;
 
 char* getPath() {
     // get pwd
@@ -40,11 +43,33 @@ char* getPath() {
     return "";
 }
 
+void addBackgroundProcess(pid_t proc_id) {
+    arrayWithBackgroundProcesses[backgroundPorcesses] = proc_id;
+    backgroundPorcesses++;
+}
+
+void deleteBackgroundProcess(pid_t proc_id) {
+    int i=0;
+    while (i<backgroundPorcesses) {
+        if (arrayWithBackgroundProcesses[i] == proc_id) {
+            // override it with the last array entry
+            if (i == backgroundPorcesses-1) {
+                arrayWithBackgroundProcesses[i] = 0;
+            } else {
+                arrayWithBackgroundProcesses[i] = arrayWithBackgroundProcesses[backgroundPorcesses-1];
+            }
+            i=backgroundPorcesses;
+        }
+        i++;
+    }
+    backgroundPorcesses--;
+}
 
 void waitFor(pid_t id) {
     int stat;
     waitpid(id,&stat,0);
-    printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n",waitID,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
+    deleteBackgroundProcess(id);
+    printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n",id,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
 }
 
 void setStartPos() {
@@ -209,6 +234,7 @@ int runProgram(const char* _input) {
         free(args);
         
         if (background) {
+            addBackgroundProcess(proc_id);
             printf("[%d]\n",proc_id);
         } else {
             waitpid(proc_id, &status, 0);
@@ -272,7 +298,7 @@ void event_strg_c(int num){
 
 int main(void)
 {
-    
+    arrayWithBackgroundProcesses = malloc(sizeof(pid_t)*MAX_BACKGROUND_PROCESSES); // set max processes
     setStartPos();
     
     //chat Str+C
