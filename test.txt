@@ -1,0 +1,12 @@
+./sar_prog 10 0 &
+wait pid
+./sar_prog 10 1 &
+wait pid
+./sar_prog 10 0 &
+./sar_prog 11 1 &
+wait pid_1 pid_2
+pwd
+cd ./tmp
+../sar_prog 10 0 &
+wait pid
+exit
