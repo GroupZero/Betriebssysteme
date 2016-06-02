@@ -22,13 +22,17 @@
 #define CHILD_RET 17
 #define MAX_BACKGROUND_PROCESSES 10
 
+//cd zeug
 unsigned int startPos = 0;
+
 pid_t waitID = 0;
 int pipeOn = 0;
 char *arg1;
 char *arg2;
 pid_t *arrayWithBackgroundProcesses;
 int backgroundPorcesses = 0;
+pid_t *arrayWithWaitProcesses;
+int waitPorcesses = 0;
 
 char* getPath() {
     // get pwd
@@ -65,11 +69,38 @@ void deleteBackgroundProcess(pid_t proc_id) {
     backgroundPorcesses--;
 }
 
-void waitFor(pid_t id) {
-    int stat;
-    waitpid(id,&stat,0);
-    deleteBackgroundProcess(id);
-    printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n",id,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
+void addWaitProcess(pid_t proc_id) {
+    arrayWithWaitProcesses[waitPorcesses] = proc_id;
+    waitPorcesses++;
+}
+
+void deleteWaitProcess(pid_t proc_id) {
+    int i=0;
+    while (i<waitPorcesses) {
+        if (arrayWithWaitProcesses[i] == proc_id) {
+            // override it with the last array entry
+            if (i == waitPorcesses-1) {
+                arrayWithWaitProcesses[i] = 0;
+            } else {
+                arrayWithWaitProcesses[i] = arrayWithWaitProcesses[waitPorcesses-1];
+            }
+            i=waitPorcesses;
+        }
+        i++;
+    }
+    waitPorcesses--;
+}
+
+void startWaiting() {
+    while (waitPorcesses > 0) {
+        waitID = arrayWithWaitProcesses[0];
+        int stat;
+        waitpid(waitID,&stat,0);
+        deleteWaitProcess(waitID);
+        deleteBackgroundProcess(waitID);
+        printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n\n",waitID,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
+    }
+    waitID = 0;
 }
 
 void setStartPos() {
@@ -247,11 +278,10 @@ void waitCommand(const char* inputArgs) {
     char *words = strtok((char*)inputArgs, " ");
     while (words != NULL) {
         pid_t child_id = (pid_t)atoi(words);
-        waitID = child_id;
-        waitFor(child_id);
-        waitID = 0;
+        addWaitProcess(child_id);
         words = strtok(NULL," ");
     }
+    startWaiting();
 }
 
 void doWork(const char* command) {
@@ -290,7 +320,9 @@ void doWork(const char* command) {
 
 void event_strg_c(int num){
     if (waitID > 0) {
-        kill(waitID, 16);
+        deleteWaitProcess(waitID);
+        deleteBackgroundProcess(waitID);
+        //kill(waitID, 16);
         //waitFor(waitID);
         waitID = 0;
     }
@@ -299,6 +331,7 @@ void event_strg_c(int num){
 int main(void)
 {
     arrayWithBackgroundProcesses = malloc(sizeof(pid_t)*MAX_BACKGROUND_PROCESSES); // set max processes
+    arrayWithWaitProcesses = malloc(sizeof(pid_t)*MAX_BACKGROUND_PROCESSES); // set max wait processes
     setStartPos();
     
     //chat Str+C
