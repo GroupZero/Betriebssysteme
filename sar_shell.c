@@ -25,14 +25,12 @@
 //cd zeug
 unsigned int startPos = 0;
 
-pid_t waitID = 0;
+pid_t waitID_activ = NULL;
 int pipeOn = 0;
 char *arg1;
 char *arg2;
 pid_t *arrayWithBackgroundProcesses;
-int backgroundPorcesses = 0;
-pid_t *arrayWithWaitProcesses;
-int waitPorcesses = 0;
+
 
 char* getPath() {
     // get pwd
@@ -69,38 +67,29 @@ void deleteBackgroundProcess(pid_t proc_id) {
     backgroundPorcesses--;
 }
 
-void addWaitProcess(pid_t proc_id) {
-    arrayWithWaitProcesses[waitPorcesses] = proc_id;
-    waitPorcesses++;
-}
-
-void deleteWaitProcess(pid_t proc_id) {
-    int i=0;
-    while (i<waitPorcesses) {
-        if (arrayWithWaitProcesses[i] == proc_id) {
-            // override it with the last array entry
-            if (i == waitPorcesses-1) {
-                arrayWithWaitProcesses[i] = 0;
-            } else {
-                arrayWithWaitProcesses[i] = arrayWithWaitProcesses[waitPorcesses-1];
-            }
-            i=waitPorcesses;
-        }
-        i++;
-    }
-    waitPorcesses--;
-}
-
-void startWaiting() {
-    while (waitPorcesses > 0) {
-        waitID = arrayWithWaitProcesses[0];
+void waitForOnePID(pid_t waitID) {
         int stat;
+        waitID_activ = waitID
+        printf("Waiting for Process with ID:%d ...\n",waitID);
         waitpid(waitID,&stat,0);
-        deleteWaitProcess(waitID);
-        deleteBackgroundProcess(waitID);
+       if(waitID_activ!=NULL){
         printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n\n",waitID,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
+       }else{
+        printf("Wait was cancled.\n");
+       }
+}
+
+void waitCommand(const char* inputArgs) {
+    // String mit den zu wartenden PIDs mit Leerzeichen getrennt 
+    char *words = strtok((char*)inputArgs, " ");
+    while (words != NULL) {
+        //die nächste PidID
+        pid_t child_id = (pid_t)atoi(words);
+        //wartet auf den PID
+        waitForOnePID(child_id);
+        // words wird zur nächsten PID ID 
+        words = strtok(NULL," ");
     }
-    waitID = 0;
 }
 
 void setStartPos() {
@@ -274,16 +263,6 @@ int runProgram(const char* _input) {
     return EXIT_SUCCESS;
 }
 
-void waitCommand(const char* inputArgs) {
-    char *words = strtok((char*)inputArgs, " ");
-    while (words != NULL) {
-        pid_t child_id = (pid_t)atoi(words);
-        addWaitProcess(child_id);
-        words = strtok(NULL," ");
-    }
-    startWaiting();
-}
-
 void doWork(const char* command) {
     pipeOn = 0;
     // check whether is | in command
@@ -293,6 +272,7 @@ void doWork(const char* command) {
             return;
         }
         if (strncmp("wait",command,3) == 0) {
+           //führt wait aus 
             waitCommand(command+4);
             return;
         }
@@ -319,12 +299,9 @@ void doWork(const char* command) {
 
 
 void event_strg_c(int num){
-    if (waitID > 0) {
-        deleteWaitProcess(waitID);
-        deleteBackgroundProcess(waitID);
-        //kill(waitID, 16);
-        //waitFor(waitID);
-        waitID = 0;
+    if (waitID_activ != NULL) {
+        kill(waitID_activ, 16);
+        waitID_activ = NULL;
     }
 }
 
