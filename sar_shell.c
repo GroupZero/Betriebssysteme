@@ -22,8 +22,10 @@
 #define CHILD_RET 17
 #define MAX_BACKGROUND_PROCESSES 10
 
+//cd zeug
 unsigned int startPos = 0;
-pid_t waitID = 0;
+
+pid_t waitID_activ = 0;
 int pipeOn = 0;
 char *arg1;
 char *arg2;
@@ -39,7 +41,7 @@ char* getPath() {
         return pwd+startPos;
     }
     free(pwd);
-    
+
     return "";
 }
 
@@ -65,11 +67,41 @@ void deleteBackgroundProcess(pid_t proc_id) {
     backgroundPorcesses--;
 }
 
-void waitFor(pid_t id) {
-    int stat;
-    waitpid(id,&stat,0);
-    deleteBackgroundProcess(id);
-    printf("ProcessWithID:%d\nWIFEXITED:%d\nWIFISIGNALED:%d\nWTERMSIG:%d\nWEXITSTATUS:%d\n",id,WIFEXITED(stat),WIFSIGNALED(stat),WTERMSIG(stat),WEXITSTATUS(stat));
+void waitForOnePID(pid_t waitID) {
+        int stat;
+        printf("Waiting for Process with ID:%d ...\n",waitID);
+        waitID_activ = waitID;
+        waitpid(waitID,&stat,0);
+       if(waitID_activ==0){
+         printf("you pressed ctrl + c, thats why we kill the process and stops your waiting. Now here are the results: \n");
+       }else{
+         printf("your waiting was worth it. Here are the results of my study: \n");
+       }
+        printf("ProcessWithID:%d\n",waitID);
+        printf("\tends normaly:%d\n",WIFEXITED(stat));
+
+        //Durch signal beendet
+        if(WIFSIGNALED(stat)){
+          printf("\tEnd by the signal: %d\n",WTERMSIG(stat));
+        }else{
+          printf("\tWas not killed by a signal. \n");
+        }
+
+        printf("\treturn of process: %d\n\n",WEXITSTATUS(stat));
+
+}
+
+void waitCommand(const char* inputArgs) {
+    // String mit den zu wartenden PIDs mit Leerzeichen getrennt
+    char *words = strtok((char*)inputArgs, " ");
+    while (words != NULL) {
+        //die nächste PidID
+        pid_t child_id = (pid_t)atoi(words);
+        //wartet auf den PID
+        waitForOnePID(child_id);
+        // words wird zur nächsten PID ID
+        words = strtok(NULL," ");
+    }
 }
 
 void setStartPos() {
@@ -77,7 +109,7 @@ void setStartPos() {
     char *pwd = malloc(sizeof(char)*MAX_CHARACTER_INPUT);
     getcwd(pwd,MAX_BUFFER);
     // if (strlen(pwd) < startPos)
-    
+
     // get length of pwd
     startPos = (int)strlen(pwd);
     free(pwd);
@@ -94,21 +126,21 @@ void cd(const char* command) {
         char* path = strstr(pwd,command+3);
         if (path) {
             char *newDirectory = malloc(sizeof(char)*startPos);
-            
+
             int pos = (int)(path - pwd);
             int path_length = (int)(pos+strlen(command+3));
-            
-            
+
+
             memcpy(newDirectory, pwd, path_length);
-            
-            
+
+
             //newDirectory[path_length] = '\0';
             if (chdir(newDirectory) == 0) {
                 setStartPos();
             } else {
                 printf("No Folder with the Name: %s\n",command+3);
             }
-            
+
             free(newDirectory);
         } else {
             printf("No Folder with the Name: %s\n",command+3);
@@ -119,7 +151,7 @@ void cd(const char* command) {
         if (chdir(command+3)) {
             printf("No Folder with the Name: %s\n",command+3);
         }
-        
+
         return;
     }
 }
@@ -128,21 +160,21 @@ char** trimCommand(const char* input) {
     char **args = NULL;
     int n=0;
     char *words = strtok((char*)input, " ");
-    
+
     while (words != NULL) {
         if (n) { // Array args not empty
             args = realloc(args,(n+1)*sizeof(char**));
         } else { // first initialisation
             args = malloc((n+1)*sizeof(char*));
         }
-        
+
         // check initialisation
         if (!args) {
             perror("Error: Initialisation");
             free(words);
             exit(-1);
         }
-        
+
         args[n] = malloc(strlen(words)+1);
         // check initialisation
         if (!args[n]) {
@@ -155,9 +187,9 @@ char** trimCommand(const char* input) {
         words = strtok(NULL," ");
     }
     free(words);
-    
-    
-    
+
+
+
     // add NULL
     if (n) { // Array args not empty
         args = realloc(args,(n+1)*sizeof(char**));
@@ -165,7 +197,7 @@ char** trimCommand(const char* input) {
         args = malloc((n+1)*sizeof(char*));
     }
     args[n] = NULL;
-    
+
     return args;
 }
 
@@ -177,18 +209,18 @@ int runProgram(const char* _input) {
         memcpy(input, _input, strlen(_input)-2);
         input[strlen(_input)-2] = '\0';
     } else memcpy(input, _input, strlen(_input));
-    
-    
+
+
     char **args = NULL;
     int n=0;
-    
+
     pid_t proc_id;
     int status = 0;
-    
-    
+
+
     int pdes[2];
     pipe(pdes);
-    
+
     proc_id = fork();
     if (proc_id < 0) {
         fprintf(stderr, "fork error\n");
@@ -196,12 +228,13 @@ int runProgram(const char* _input) {
         return EXIT_FAILURE;
     }
     if (proc_id == 0) { /* child process */
-        
+        signal(2, SIG_IGN);
         if (pipeOn == 0) {
             args = trimCommand((char*)input);
         } else {
             args = trimCommand(arg1);
             /* child process */
+
             close(pdes[0]);
             close(1);       /* close stdout */
             dup(pdes[1]);
@@ -213,14 +246,14 @@ int runProgram(const char* _input) {
         }
         execvp(args[0], args);
         exit(1);
-        
+
     } else { /* parent */
-        
+
         if (pipeOn == 1) {
             args = trimCommand(arg2);
             close(0);       /* close stdin */
             close(pdes[1]);
-            
+
             dup(pdes[0]);
             execvp(args[0], args);
         }
@@ -232,26 +265,16 @@ int runProgram(const char* _input) {
          i++;
          }*/
         free(args);
-        
+
         if (background) {
-            addBackgroundProcess(proc_id);
+            //addBackgroundProcess(proc_id);
             printf("[%d]\n",proc_id);
         } else {
+            waitID_activ= proc_id;
             waitpid(proc_id, &status, 0);
         }
     }
     return EXIT_SUCCESS;
-}
-
-void waitCommand(const char* inputArgs) {
-    char *words = strtok((char*)inputArgs, " ");
-    while (words != NULL) {
-        pid_t child_id = (pid_t)atoi(words);
-        waitID = child_id;
-        waitFor(child_id);
-        waitID = 0;
-        words = strtok(NULL," ");
-    }
 }
 
 void doWork(const char* command) {
@@ -263,6 +286,7 @@ void doWork(const char* command) {
             return;
         }
         if (strncmp("wait",command,3) == 0) {
+           //führt wait aus
             waitCommand(command+4);
             return;
         }
@@ -270,7 +294,7 @@ void doWork(const char* command) {
             cd(command);
             return;
         }
-        
+
         //if (!runProgram(command)) printf("Error\n");
         runProgram(command);
     } else { // pipe
@@ -279,35 +303,35 @@ void doWork(const char* command) {
         arg1 = words;
         words = strtok(NULL,"|");
         arg2 = words;
-        
+
         // build pipe
         runProgram(command);
     }
-    
-    
+
+
 }
 
 
 void event_strg_c(int num){
-    if (waitID > 0) {
-        kill(waitID, 16);
-        //waitFor(waitID);
-        waitID = 0;
+    if (waitID_activ != 0) {
+        kill(waitID_activ, 16);
+        printf("\nprocess with ID:%d was killed\n", waitID_activ);
+        waitID_activ = 0;
     }
 }
 
 int main(void)
 {
-    arrayWithBackgroundProcesses = malloc(sizeof(pid_t)*MAX_BACKGROUND_PROCESSES); // set max processes
+
     setStartPos();
-    
+
     //chat Str+C
     signal(SIGINT,event_strg_c);
-    
+
     printf(".>");
-    
-    
-    
+
+
+
     // read Input
     while (1) {
         char *command = malloc(sizeof(char)*MAX_CHARACTER_INPUT);
@@ -322,8 +346,6 @@ int main(void)
         }
         free(command);
     }
-    
+
     return 0;
 }
-
-
