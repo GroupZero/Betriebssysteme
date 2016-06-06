@@ -77,7 +77,7 @@ int main(void)
     
     size_t cmd_sz = BUF_SIZE - 1;
     char *cmd = buf;
-    
+    printf(".>");
     while (1) {
         /* get user command */
         ret = getline(&cmd, &cmd_sz, stdin);
